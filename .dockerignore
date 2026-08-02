@@ -1,0 +1,13 @@
+.git
+.github
+dist
+build
+__pycache__
+*.pyc
+.venv
+grafana
+test_govee_h5140.py
+docker-compose*.yml
+README.md
+CLAUDE.md
+uv.lock

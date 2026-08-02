@@ -53,6 +53,31 @@ uv tool install .                      # or install the local checkout
 
 `uv` provisions the interpreter itself, so no system Python or virtualenv setup is needed.
 
+### Docker
+
+For unattended collection, running as a container is usually tidier than cron — the
+restart policy handles failures and the configuration lives in one declarative file.
+`read --watch` turns the collector into a long-lived poller, which is what the image
+does by default.
+
+```sh
+docker build -t govee-extract:latest .
+docker run -d --name govee --restart unless-stopped \
+    -e GOVEE_API_KEY="$(cat ~/.config/govee/api_key)" \
+    govee-extract:latest \
+    read --watch 300 --quiet --influx-url http://influxdb:8086 --influx-db govee
+```
+
+See `docker-compose.sample.yml` for a compose equivalent, including how to mount an
+existing key file instead of passing the key through the environment.
+
+The image is stdlib-only Alpine (~50 MB), runs as a non-root user, and builds natively on
+arm64 as well as x86-64.
+
+One gotcha: inside a container, `localhost` is the container itself. If InfluxDB runs on
+the Docker host, use the host's LAN IP — or put both on the same Docker network and use
+the InfluxDB container's name.
+
 ## API key
 
 Get a key in the Govee Home app: **Profile → About Us → Apply for API Key**. It arrives
@@ -128,33 +153,33 @@ which is what that mistake looks like.
 
 ## Grafana / InfluxDB
 
-Grafana never calls this script. It queries InfluxDB; this script writes to InfluxDB on
-a timer. That's the same shape as `ecobee_influx_connector` and Powerwall-Dashboard's own
-Telegraf collector, and it's why there's no web server or daemon here — cron is enough.
+Grafana never calls this script. Grafana queries InfluxDB; this script writes to InfluxDB
+on a timer. That's why there's no web server or exporter here — a container with
+`--watch`, or a cron entry, is enough.
 
 ```
-cron ──> govee-h5140 ──HTTP──> InfluxDB 1.8 <──query── Grafana
-         (every 5 min)          (db: govee)             (dashboard)
+govee-h5140 --HTTP--> InfluxDB <--query-- Grafana
+ (--watch 300)        (db: govee)         (dashboard)
 ```
 
 ### 1. Create the database
 
-Powerwall-Dashboard runs `influxdb:1.8` on port 8086 with database `powerwall`. Give
-Govee its own database so it stays clear of that stack's continuous queries, backups and
-upgrades:
+Give the collector its own database rather than writing into one another application
+manages — that keeps it clear of any retention policies, continuous queries or backup
+tooling that application owns:
 
 ```sh
 docker exec -it influxdb influx -execute 'CREATE DATABASE govee'
 docker exec -it influxdb influx -execute 'SHOW DATABASES'
 ```
 
-(Writing into `powerwall` instead works and saves adding a datasource — pass
-`--influx-db powerwall`. It just mixes foreign data into an app-managed database.)
+InfluxDB 1.x creates the `autogen` retention policy automatically, with infinite
+retention. Readings are tiny — four float fields every few minutes — so this needs no
+downsampling.
 
 ### 2. Write a reading
 
-From the machine that will run the collector, with `<influx-host>` being the box running
-Powerwall-Dashboard:
+With `<influx-host>` being wherever InfluxDB listens:
 
 ```sh
 govee-h5140 read -q --influx-url http://<influx-host>:8086 --influx-db govee
@@ -173,24 +198,32 @@ To see exactly what would be written without writing it, use `--line-protocol`:
 govee_air_quality,sku=H5140,device=12:BC:AC:27:6E:02:6C:7C,name=Smart\ CO₂\ Monitor online=1i,co2_ppm=620.0,temperature_c=20.7,humidity_pct=49.9 1785636571802139136
 ```
 
-### 3. Schedule it
+### 3. Run it continuously
+
+Either as a container (see [Docker](#docker) and `docker-compose.sample.yml`):
+
+```sh
+govee-h5140 read --watch 300 -q --influx-url http://influxdb:8086 --influx-db govee
+```
+
+or from cron, if you'd rather not run a daemon:
 
 ```cron
 */5 * * * * $HOME/.local/bin/govee-h5140 read -q --influx-url http://<influx-host>:8086 --influx-db govee
 ```
 
-Every 5 minutes is 288 API calls/day against a 10 000/day quota, so there's plenty of
-headroom — every minute (1440/day) is fine too. The device list is cached for 24 h
-(`--cache-ttl`), which keeps each poll to a single API call.
+Either way, a 300 s interval is 288 API calls/day against a 10 000/day quota, so there's
+ample headroom — every minute (1440/day) is fine too. The device list is cached for 24 h
+(`--cache-ttl`), keeping each poll to a single API call.
 
 ### 4. Add the datasource and dashboard
 
 In Grafana: **Connections → Data sources → Add → InfluxDB**, query language *InfluxQL*,
-URL `http://influxdb:8086` (the container name, since Grafana is in the same compose
-network), database `govee`. Save & test.
+URL `http://influxdb:8086` (or the host and port where InfluxDB listens), database
+`govee`. Save & test.
 
 Then **Dashboards → New → Import**, upload `grafana/govee-h5140-dashboard.json`, and pick
-that datasource when prompted.
+that datasource when prompted. The dashboard targets Grafana 12 (`schemaVersion 41`).
 
 The dashboard has current-value stat tiles, a CO₂ time series with dashed threshold lines
 at 800 / 1000 / 1400 ppm, and separate temperature and humidity panels. It's filtered by a

@@ -1,0 +1,44 @@
+# Example: run the collector as a long-lived container that writes readings to
+# InfluxDB on a timer. Copy this to docker-compose.yml and adjust.
+#
+#   docker compose up -d --build
+#   docker compose logs -f govee
+#
+# This assumes an InfluxDB reachable as `influxdb` on a shared Docker network.
+# If InfluxDB runs on the host instead, use the host's LAN IP rather than
+# `localhost` -- inside a container, localhost is the container itself.
+
+services:
+  govee:
+    build: .
+    # Or, after `docker build -t govee-extract:latest .`:
+    # image: govee-extract:latest
+    container_name: govee
+    restart: unless-stopped
+
+    # The API key. Either set it in the environment (shown here, e.g. from a
+    # .env file next to this compose file) ...
+    environment:
+      GOVEE_API_KEY: "${GOVEE_API_KEY:?set GOVEE_API_KEY in .env}"
+
+    # ... or mount an existing key file read-only and drop the environment
+    # block above. The collector looks for ~/.config/govee/api_key, which for
+    # the container's `govee` user is /home/govee/.config/govee/api_key:
+    # volumes:
+    #   - ${HOME}/.config/govee/api_key:/home/govee/.config/govee/api_key:ro
+
+    command: >
+      read
+      --watch 300
+      --quiet
+      --influx-url http://influxdb:8086
+      --influx-db govee
+
+    # Only needed if InfluxDB lives in a different compose project.
+    # networks:
+    #   - metrics
+
+# networks:
+#   metrics:
+#     external: true
+#     name: some-existing-network
