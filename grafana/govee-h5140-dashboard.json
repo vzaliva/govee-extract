@@ -1,0 +1,340 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_INFLUXDB",
+      "label": "InfluxDB (govee)",
+      "description": "InfluxDB 1.x datasource pointing at the 'govee' database",
+      "type": "datasource",
+      "pluginId": "influxdb",
+      "pluginName": "InfluxDB"
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "CO2, temperature and humidity from a Govee H5140 air quality monitor.",
+  "editable": true,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+      "description": "Latest CO2 reading. Above 1000 ppm is commonly used as the threshold for noticeably stuffy air; above 1400 ppm warrants ventilation.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "#EAB839", "value": 800 },
+              { "color": "orange", "value": 1000 },
+              { "color": "red", "value": 1400 }
+            ]
+          },
+          "unit": "conppm"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 8, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+          "query": "SELECT last(\"co2_ppm\") FROM \"govee_air_quality\" WHERE (\"name\" =~ /^$device$/) AND $timeFilter",
+          "rawQuery": true,
+          "refId": "A",
+          "resultFormat": "time_series"
+        }
+      ],
+      "title": "CO2 now",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "#E0752D", "mode": "fixed" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "text", "value": null }] },
+          "unit": "celsius"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 8, "x": 8, "y": 0 },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+          "query": "SELECT last(\"temperature_c\") FROM \"govee_air_quality\" WHERE (\"name\" =~ /^$device$/) AND $timeFilter",
+          "rawQuery": true,
+          "refId": "A",
+          "resultFormat": "time_series"
+        }
+      ],
+      "title": "Temperature now",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "#3D71D9", "mode": "fixed" },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "text", "value": null }] },
+          "unit": "humidity"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 5, "w": 8, "x": 16, "y": 0 },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+          "query": "SELECT last(\"humidity_pct\") FROM \"govee_air_quality\" WHERE (\"name\" =~ /^$device$/) AND $timeFilter",
+          "rawQuery": true,
+          "refId": "A",
+          "resultFormat": "time_series"
+        }
+      ],
+      "title": "Humidity now",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+      "description": "Dashed lines mark 800 / 1000 / 1400 ppm.",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "#5794F2", "mode": "fixed" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "ppm",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": 900000,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "dashed" }
+          },
+          "mappings": [],
+          "min": 350,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "transparent", "value": null },
+              { "color": "#EAB839", "value": 800 },
+              { "color": "orange", "value": 1000 },
+              { "color": "red", "value": 1400 }
+            ]
+          },
+          "unit": "conppm"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 5 },
+      "id": 4,
+      "options": {
+        "legend": { "calcs": ["min", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "hideZeros": false, "mode": "single", "sort": "none" }
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+          "query": "SELECT mean(\"co2_ppm\") FROM \"govee_air_quality\" WHERE (\"name\" =~ /^$device$/) AND $timeFilter GROUP BY time($__interval) fill(previous)",
+          "rawQuery": true,
+          "refId": "A",
+          "resultFormat": "time_series"
+        }
+      ],
+      "title": "CO2",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "#E0752D", "mode": "fixed" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "°C",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": 900000,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "text", "value": null }] },
+          "unit": "celsius"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "id": 5,
+      "options": {
+        "legend": { "calcs": ["min", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "hideZeros": false, "mode": "single", "sort": "none" }
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+          "query": "SELECT mean(\"temperature_c\") FROM \"govee_air_quality\" WHERE (\"name\" =~ /^$device$/) AND $timeFilter GROUP BY time($__interval) fill(previous)",
+          "rawQuery": true,
+          "refId": "A",
+          "resultFormat": "time_series"
+        }
+      ],
+      "title": "Temperature",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "#3D71D9", "mode": "fixed" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "%",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "gradientMode": "none",
+            "hideFrom": { "legend": false, "tooltip": false, "viz": false },
+            "insertNulls": false,
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "never",
+            "spanNulls": 900000,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "text", "value": null }] },
+          "unit": "humidity"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "id": 6,
+      "options": {
+        "legend": { "calcs": ["min", "mean", "max"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "hideZeros": false, "mode": "single", "sort": "none" }
+      },
+      "pluginVersion": "12.3.1",
+      "targets": [
+        {
+          "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+          "query": "SELECT mean(\"humidity_pct\") FROM \"govee_air_quality\" WHERE (\"name\" =~ /^$device$/) AND $timeFilter GROUP BY time($__interval) fill(previous)",
+          "rawQuery": true,
+          "refId": "A",
+          "resultFormat": "time_series"
+        }
+      ],
+      "title": "Humidity",
+      "type": "timeseries"
+    }
+  ],
+  "preload": false,
+  "refresh": "5m",
+  "schemaVersion": 41,
+  "tags": ["govee", "air-quality"],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "datasource": { "type": "influxdb", "uid": "${DS_INFLUXDB}" },
+        "definition": "SHOW TAG VALUES FROM \"govee_air_quality\" WITH KEY = \"name\"",
+        "includeAll": false,
+        "label": "Device",
+        "multi": false,
+        "name": "device",
+        "options": [],
+        "query": "SHOW TAG VALUES FROM \"govee_air_quality\" WITH KEY = \"name\"",
+        "refresh": 1,
+        "regex": "",
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": { "from": "now-24h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Govee Air Quality (H5140)",
+  "uid": "govee-h5140",
+  "version": 1,
+  "weekStart": ""
+}

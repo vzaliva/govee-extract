@@ -1,0 +1,21 @@
+# Secrets -- never commit an API key
+api_key
+*.api_key
+.env
+influx_token
+secrets.*
+
+# Local agent/editor config
+.claude/
+CLAUDE.md
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Local data captured from the device
+*.csv
+*.log
