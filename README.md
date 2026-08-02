@@ -1,7 +1,8 @@
-# govee_h5140
+# govee-extract
 
 Read CO₂, temperature and humidity from a **GoveeLife Smart Air Quality Monitor / CO2
-Detector H5140** over Govee's cloud API. Single file, Python 3.9+, standard library only.
+Detector H5140** over Govee's cloud API. Single module, Python 3.9+, standard library only —
+no runtime dependencies. Managed with [uv](https://docs.astral.sh/uv/).
 
 ## Which API this uses
 
@@ -20,7 +21,34 @@ Sensors live on Govee's newer **Platform API**, which is what this script target
 The H5140 reports as type `devices.types.air_quality_monitor` with the capability
 instances `carbonDioxideConcentration`, `sensorTemperature`, `sensorHumidity` and `online`.
 
-## Setup
+## Install
+
+Run it without installing anything, straight from the repo:
+
+```sh
+uvx --from git+https://github.com/vzaliva/govee-extract govee-h5140 list
+```
+
+For repeated use — and for cron, where you want a stable path and no rebuild per run —
+install it as a uv tool:
+
+```sh
+uv tool install git+https://github.com/vzaliva/govee-extract
+govee-h5140 list                       # now on PATH at ~/.local/bin/govee-h5140
+uv tool upgrade govee-extract          # later
+```
+
+Working on a checkout:
+
+```sh
+git clone git@github.com:vzaliva/govee-extract.git && cd govee-extract
+uv run govee-h5140 list                # runs from source in a managed venv
+uv tool install .                      # or install the local checkout
+```
+
+`uv` provisions the interpreter itself, so no system Python or virtualenv setup is needed.
+
+## API key
 
 Get a key in the Govee Home app: **Profile → About Us → Apply for API Key**. It arrives
 by email. The script finds it from, in order:
@@ -37,9 +65,13 @@ chmod 600 ~/.config/govee/api_key
 
 ## Usage
 
+Examples below use the installed `govee-h5140` command. Substitute `uv run govee-h5140`
+from a checkout, or `uvx --from git+https://github.com/vzaliva/govee-extract govee-h5140`
+to run without installing.
+
 ```sh
-./govee_h5140.py list          # every device the key can see, with capabilities
-./govee_h5140.py read          # one reading from the H5140
+govee-h5140 list          # every device the key can see, with capabilities
+govee-h5140 read          # one reading from the H5140
 ```
 
 ```
@@ -54,18 +86,18 @@ Study CO2  [H5140 DE:76:17:29:AA:BB:CC:DD]
 Machine-readable, logging, and polling:
 
 ```sh
-./govee_h5140.py read --json                    # one JSON object
-./govee_h5140.py read --raw                     # unparsed API payload
-./govee_h5140.py read --csv ~/co2.csv           # append a row
-./govee_h5140.py read --watch 60 --csv ~/co2.csv  # poll every 60s forever
+govee-h5140 read --json                    # one JSON object
+govee-h5140 read --raw                     # unparsed API payload
+govee-h5140 read --csv ~/co2.csv           # append a row
+govee-h5140 read --watch 60 --csv ~/co2.csv  # poll every 60s forever
 ```
 
 Selecting a device when you own more than one:
 
 ```sh
-./govee_h5140.py read --device DE:76:17:29:AA:BB:CC:DD
-./govee_h5140.py read --name "study"            # substring, case-insensitive
-./govee_h5140.py read --sku ''                  # match any model, not just H5140
+govee-h5140 read --device DE:76:17:29:AA:BB:CC:DD
+govee-h5140 read --name "study"            # substring, case-insensitive
+govee-h5140 read --sku ''                  # match any model, not just H5140
 ```
 
 ### Temperature units
@@ -89,8 +121,8 @@ a timer. That's the same shape as `ecobee_influx_connector` and Powerwall-Dashbo
 Telegraf collector, and it's why there's no web server or daemon here — cron is enough.
 
 ```
-cron ──> govee_h5140.py ──HTTP──> InfluxDB 1.8 <──query── Grafana
-         (every 5 min)            (db: govee)             (dashboard)
+cron ──> govee-h5140 ──HTTP──> InfluxDB 1.8 <──query── Grafana
+         (every 5 min)          (db: govee)             (dashboard)
 ```
 
 ### 1. Create the database
@@ -113,7 +145,7 @@ From the machine that will run the collector, with `<influx-host>` being the box
 Powerwall-Dashboard:
 
 ```sh
-./govee_h5140.py read -q --influx-url http://<influx-host>:8086 --influx-db govee
+govee-h5140 read -q --influx-url http://<influx-host>:8086 --influx-db govee
 ```
 
 Check it landed:
@@ -132,7 +164,7 @@ govee_air_quality,sku=H5140,device=DE:76:...,name=Study\ CO2 co2_ppm=812i,temper
 ### 3. Schedule it
 
 ```cron
-*/5 * * * * /home/lord/src/govee/govee_h5140.py read -q --influx-url http://<influx-host>:8086 --influx-db govee
+*/5 * * * * $HOME/.local/bin/govee-h5140 read -q --influx-url http://<influx-host>:8086 --influx-db govee
 ```
 
 Every 5 minutes is 288 API calls/day against a 10 000/day quota, so there's plenty of
@@ -169,7 +201,7 @@ starts a new series rather than silently mixing °C and °F into one.
 ### InfluxDB 2.x
 
 ```sh
-./govee_h5140.py read -q --influx-url http://host:8086 \
+govee-h5140 read -q --influx-url http://host:8086 \
   --influx-org myorg --influx-bucket govee --influx-token "$INFLUX_TOKEN"
 ```
 
@@ -179,8 +211,9 @@ so credentials needn't appear in the crontab.
 ## Rate limits
 
 Govee enforces 10 000 requests/account/day, plus per-endpoint limits (30/min for the
-device list, 30/min/device for state). Each `read` costs two requests — one list, one
-state. `--watch` warns below a 10 s interval, which is where the daily cap starts to bite.
+device list, 30/min/device for state). A `read` costs one request in the steady state —
+the device list is cached for 24 h (`--cache-ttl`), so only the state call is made.
+`--watch` warns below a 10 s interval, which is where the daily cap starts to bite.
 
 429s and 5xxs are retried with exponential backoff, honouring `Retry-After` and
 `RateLimit-Reset`. `-v` prints the rate-limit headers.
@@ -190,14 +223,26 @@ Exit codes: `0` success, `2` API/auth/selection error, `130` interrupted.
 ## cron example
 
 ```cron
-*/5 * * * * /home/lord/src/govee/govee_h5140.py read --csv /home/lord/co2.csv >/dev/null
+*/5 * * * * $HOME/.local/bin/govee-h5140 read --csv $HOME/co2.csv >/dev/null
 ```
 
-## Tests
+## Development
 
-`python3 test_govee_h5140.py` stubs the HTTP layer and checks capability decoding, unit
-conversion, CSV/JSON output, device selection and error paths. No network or API key
-needed.
+```sh
+uv run test_govee_h5140.py            # 53 checks; no network, no API key
+uv run --python 3.9 --no-project test_govee_h5140.py   # verify the requires-python floor
+uv build                              # wheel + sdist into dist/
+uv lock                               # refresh uv.lock
+uvx --from . govee-h5140 --help       # run the packaged entry point from source
+```
+
+The suite stubs `GoveeClient._request` and `urllib.request.urlopen`, so it covers
+capability decoding, unit conversion, CSV/JSON/line-protocol output, the device cache,
+device selection and error paths without touching the network. It is a flat script of
+`check(label, condition)` calls rather than pytest, so run the whole file.
+
+Tested on CPython 3.9 through 3.13. `uv.lock` is committed because this is an application
+rather than a library; there are no runtime dependencies to resolve.
 
 ## Notes
 

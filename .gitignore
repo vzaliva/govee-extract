@@ -9,12 +9,15 @@ secrets.*
 .claude/
 CLAUDE.md
 
-# Python
+# Python / uv
 __pycache__/
 *.py[cod]
 .venv/
 venv/
 *.egg-info/
+dist/
+build/
+# uv.lock is committed deliberately -- this is an application, not a library
 
 # Local data captured from the device
 *.csv

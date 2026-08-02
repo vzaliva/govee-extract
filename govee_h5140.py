@@ -781,7 +781,8 @@ def cmd_read(args: argparse.Namespace, client: GoveeClient) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="govee_h5140.py",
+        # prog is left to argparse so the installed entry point reports itself as
+        # "govee-h5140" while direct execution reports "govee_h5140.py".
         description="Read CO2, temperature and humidity from a Govee H5140 air quality monitor.",
         epilog=(
             "API key: --api-key, $GOVEE_API_KEY, or ~/.config/govee/api_key. "
