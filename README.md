@@ -18,8 +18,13 @@ Sensors live on Govee's newer **Platform API**, which is what this script target
 | Device state | `POST https://openapi.api.govee.com/router/api/v1/device/state` |
 | Auth | `Govee-API-Key: <key>` header |
 
-The H5140 reports as type `devices.types.air_quality_monitor` with the capability
-instances `carbonDioxideConcentration`, `sensorTemperature`, `sensorHumidity` and `online`.
+The H5140 reports as type `devices.types.air_quality_monitor`. Verified against real
+hardware on 2026-08-01:
+
+- The device list advertises `carbonDioxideConcentration`, `sensorTemperature` and
+  `sensorHumidity`, **with no `parameters` block** — so no ranges and no declared units.
+- The state response additionally returns `online`, which is *not* in the device list.
+- Every state value is a bare scalar: `{"value": 620}`, not a nested object.
 
 ## Install
 
@@ -75,11 +80,11 @@ govee-h5140 read          # one reading from the H5140
 ```
 
 ```
-Study CO2  [H5140 DE:76:17:29:AA:BB:CC:DD]
-  read at      2026-08-01 18:33:48 BST
-  CO2          812 ppm
-  Temperature  21.4 °C
-  Humidity     47 %
+Smart CO₂ Monitor  [H5140 12:BC:AC:27:6E:02:6C:7C]
+  read at      2026-08-01 19:09:31 PDT
+  CO2          620 ppm
+  Temperature  20.7 °C
+  Humidity     49.9 %
   Online       yes
 ```
 
@@ -95,24 +100,31 @@ govee-h5140 read --watch 60 --csv ~/co2.csv  # poll every 60s forever
 Selecting a device when you own more than one:
 
 ```sh
-govee-h5140 read --device DE:76:17:29:AA:BB:CC:DD
+govee-h5140 read --device 12:BC:AC:27:6E:02:6C:7C
 govee-h5140 read --name "study"            # substring, case-insensitive
 govee-h5140 read --sku ''                  # match any model, not just H5140
 ```
 
 ### Temperature units
 
-Govee reports `sensorTemperature` in Fahrenheit on most sensor models. The script reads
-the unit the API declares in the device-list capability parameters and converts to
-Celsius by default.
+**The H5140 reports Fahrenheit and does not say so** — the API declares no unit anywhere.
+This was confirmed against hardware (a room at 20.7 °C reported as `69.26`), so the script
+assumes Fahrenheit for this SKU and outputs Celsius by default. No flag needed.
 
 ```sh
 --temp-unit c|f|raw       # output unit; 'raw' passes the value through untouched
---assume-temp-unit c|f    # source unit, when the API doesn't declare one
+--assume-temp-unit c|f    # source unit, overriding what the script infers
 ```
 
-If the API declares no unit, the value is passed through unconverted and a warning goes
-to stderr rather than the script silently guessing.
+Source unit is resolved in this order: `--assume-temp-unit`, then any unit the API
+declares, then a per-SKU default from hardware testing (`SKU_TEMP_UNITS`). If none apply,
+the value passes through unconverted with a warning rather than being guessed at.
+
+One caveat worth knowing: it is not established whether Govee's Fahrenheit output is fixed
+per model or follows the unit selected in the Govee app. If you switch the app to Celsius
+and readings suddenly look 30-odd degrees too low, pass `--assume-temp-unit c`. The script
+warns when it is about to treat an implausibly low value (below 50 °F) as Fahrenheit,
+which is what that mistake looks like.
 
 ## Grafana / InfluxDB
 
@@ -158,7 +170,7 @@ docker exec -it influxdb influx -database govee \
 To see exactly what would be written without writing it, use `--line-protocol`:
 
 ```
-govee_air_quality,sku=H5140,device=DE:76:...,name=Study\ CO2 co2_ppm=812i,temperature_c=21.4,humidity_pct=47i,online=1i 1785635640063608832
+govee_air_quality,sku=H5140,device=12:BC:AC:27:6E:02:6C:7C,name=Smart\ CO₂\ Monitor online=1i,co2_ppm=620.0,temperature_c=20.7,humidity_pct=49.9 1785636571802139136
 ```
 
 ### 3. Schedule it
@@ -188,15 +200,21 @@ at 800 / 1000 / 1400 ppm, and separate temperature and humidity panels. It's fil
 
 | Field | Type | Notes |
 |---|---|---|
-| `co2_ppm` | integer | |
+| `co2_ppm` | float | |
 | `temperature_c` | float | named `temperature_f` if you pass `--temp-unit f` |
-| `humidity_pct` | integer | |
+| `humidity_pct` | float | |
 | `online` | integer | 1/0 |
 
 Tags: `sku`, `device`, `name`. Measurement: `govee_air_quality` (`--influx-measurement`).
 
-The temperature field is named after its unit deliberately — switching `--temp-unit`
-starts a new series rather than silently mixing °C and °F into one.
+Two deliberate choices here:
+
+- **All sensor values are written as floats**, even CO₂, which always reads as a whole
+  number. The device returns humidity as `49.9` but would return `50` as an integer, and
+  InfluxDB rejects a point whose field type differs from the existing series — a stray
+  integer would start silently failing writes with `field type conflict`.
+- **The temperature field is named after its unit**, so switching `--temp-unit` starts a
+  new series rather than mixing °C and °F into one.
 
 ### InfluxDB 2.x
 
@@ -229,7 +247,7 @@ Exit codes: `0` success, `2` API/auth/selection error, `130` interrupted.
 ## Development
 
 ```sh
-uv run test_govee_h5140.py            # 53 checks; no network, no API key
+uv run test_govee_h5140.py            # 65 checks; no network, no API key
 uv run --python 3.9 --no-project test_govee_h5140.py   # verify the requires-python floor
 uv build                              # wheel + sdist into dist/
 uv lock                               # refresh uv.lock

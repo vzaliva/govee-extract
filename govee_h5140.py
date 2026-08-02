@@ -326,6 +326,17 @@ def _normalise_unit(text: str | None) -> str | None:
     return None
 
 
+# Units observed from real hardware, used only when the API declares nothing itself.
+# H5140 confirmed 2026-08-01: reported 69.26 with no unit field, i.e. Fahrenheit.
+# Caveat: this may track the unit selected in the Govee app rather than being fixed
+# per model, which is what SUSPICIOUS_FAHRENHEIT_BELOW guards against.
+SKU_TEMP_UNITS: dict[str, str] = {"H5140": "F"}
+
+# An indoor air-quality monitor reading below 50 F (10 C) is unusual; if we are about to
+# treat such a value as Fahrenheit it more likely arrived as Celsius already.
+SUSPICIOUS_FAHRENHEIT_BELOW = 50.0
+
+
 def temperature_unit_from_device(device_entry: dict[str, Any]) -> str | None:
     """Look for a declared temperature unit in a /user/devices capability definition."""
     for cap in device_entry.get("capabilities", []) or []:
@@ -368,6 +379,14 @@ def apply_temperature_unit(reading: Reading, source: str | None, target: str) ->
             )
         reading.units.setdefault("temperature", source or "unknown")
         return reading
+
+    if source == "F" and float(value) < SUSPICIOUS_FAHRENHEIT_BELOW:
+        print(
+            f"[govee] warning: treating {value} as Fahrenheit, but that is unusually low for "
+            "an indoor sensor and may already be Celsius. Check with --temp-unit raw, and "
+            "pass --assume-temp-unit c if the Govee app is set to Celsius.",
+            file=sys.stderr,
+        )
 
     reading.values["temperature"] = round(convert_temperature(float(value), source, target), 2)
     reading.units["temperature"] = target
@@ -546,10 +565,12 @@ def to_line_protocol(reading: Reading, measurement: str = DEFAULT_MEASUREMENT) -
     for key, value in reading.values.items():
         if isinstance(value, bool):
             fields.append(f"{_escape_key(key)}={1 if value else 0}i")
-        elif isinstance(value, int):
-            fields.append(f"{_escape_key(key)}={value}i")
-        elif isinstance(value, float):
-            fields.append(f"{_escape_key(key)}={value}")
+        elif isinstance(value, (int, float)):
+            # Always float, never an integer field. The device returns humidity as 49.9
+            # one minute and could return 50 the next; InfluxDB rejects a point whose
+            # field type differs from the existing series, so a stray int would start
+            # silently dropping writes with "field type conflict".
+            fields.append(f"{_escape_key(key)}={float(value)}")
         # dicts and strings are skipped: not useful as Influx numeric fields
 
     if not fields:
@@ -689,7 +710,11 @@ def cmd_list(args: argparse.Namespace, client: GoveeClient) -> int:
 def _fetch(client: GoveeClient, entry: dict[str, Any], args: argparse.Namespace) -> Reading:
     payload = client.device_state(entry["sku"], entry["device"])
     reading = parse_state(payload, name=entry.get("deviceName", ""))
-    source = _normalise_unit(args.assume_temp_unit) or temperature_unit_from_device(entry)
+    source = (
+        _normalise_unit(args.assume_temp_unit)
+        or temperature_unit_from_device(entry)
+        or SKU_TEMP_UNITS.get(str(entry.get("sku", "")).upper())
+    )
     return apply_temperature_unit(reading, source, args.temp_unit)
 
 
